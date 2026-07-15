@@ -109,11 +109,14 @@ export function FreeTest({
       </p>
 
       <div className="pitch-display">
-        <div className="pitch-note">{live.note ?? '—'}</div>
+        <div className={`pitch-note ${live.note ? '' : 'idle'}`}>{live.note ?? '—'}</div>
         <div className="cents-meter">
           <div className="cents-bar" style={{ left: `${50 + live.cents / 1.2}%` }} />
         </div>
-        <div className="muted small">{live.note ? `${live.cents > 0 ? '+' : ''}${live.cents}센트` : '소리를 내보세요'}</div>
+        <div className={`stage-label ${live.note ? 'listen' : ''}`}>
+          <span className="rec-dot" />
+          {live.note ? `${live.cents > 0 ? '+' : ''}${live.cents}센트` : '소리를 내보세요'}
+        </div>
       </div>
 
       <div className="range-live">

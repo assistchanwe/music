@@ -9,6 +9,8 @@ const CATEGORY_LABELS: Record<MatchCategory, string> = {
   transpose: '🎚️ 키를 조절하면 부를 수 있는 곡',
 };
 
+const PREVIEW_COUNT = 10;
+
 function keyShiftLabel(shift: number): string {
   if (shift === 0) return '원키';
   return shift > 0 ? `+${shift}키` : `${shift}키`;
@@ -16,6 +18,7 @@ function keyShiftLabel(shift: number): string {
 
 export function SongList({ userLow, userHigh }: { userLow: number; userHigh: number }) {
   const [genre, setGenre] = useState<string>('전체');
+  const [expanded, setExpanded] = useState<Set<MatchCategory>>(new Set());
 
   const all = useMemo(() => recommendSongs(userLow, userHigh, SONGS), [userLow, userHigh]);
   const genres = useMemo(() => ['전체', ...new Set(SONGS.map((s) => s.genre))], []);
@@ -27,6 +30,14 @@ export function SongList({ userLow, userHigh }: { userLow: number; userHigh: num
     list.push(r);
     grouped.set(r.category, list);
   }
+
+  const toggleExpand = (cat: MatchCategory) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(cat)) next.delete(cat);
+      else next.add(cat);
+      return next;
+    });
 
   return (
     <div className="song-list">
@@ -49,15 +60,23 @@ export function SongList({ userLow, userHigh }: { userLow: number; userHigh: num
       {(['comfortable', 'challenge', 'transpose'] as MatchCategory[]).map((cat) => {
         const items = grouped.get(cat);
         if (!items?.length) return null;
+        const isExpanded = expanded.has(cat);
+        const visible = isExpanded ? items : items.slice(0, PREVIEW_COUNT);
+        const hiddenCount = items.length - visible.length;
         return (
           <section key={cat}>
-            <h3>{CATEGORY_LABELS[cat]}</h3>
+            <h3>
+              {CATEGORY_LABELS[cat]} <span className="count-badge">{items.length}곡</span>
+            </h3>
             <ul>
-              {items.map((r) => (
+              {visible.map((r) => (
                 <li key={`${r.song.artist}-${r.song.title}`} className="song-item">
                   <div className="song-main">
                     <span className="song-title">{r.song.title}</span>
-                    <span className="song-artist">{r.song.artist}</span>
+                    <span className="song-sub">
+                      <span className="song-artist">{r.song.artist}</span>
+                      <span className="song-genre">{r.song.genre}</span>
+                    </span>
                   </div>
                   <div className="song-meta">
                     <span className="song-range">
@@ -70,6 +89,11 @@ export function SongList({ userLow, userHigh }: { userLow: number; userHigh: num
                 </li>
               ))}
             </ul>
+            {(hiddenCount > 0 || isExpanded) && (
+              <button className="show-more" onClick={() => toggleExpand(cat)}>
+                {isExpanded ? '접기 ▲' : `${hiddenCount}곡 더 보기 ▼`}
+              </button>
+            )}
           </section>
         );
       })}

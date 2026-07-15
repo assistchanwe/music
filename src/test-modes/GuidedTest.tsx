@@ -213,7 +213,8 @@ export function GuidedTest({
         <>
           <div className="pitch-display">
             <div className="pitch-note target">{midiToNoteName(step.targetMidi)}</div>
-            <div className={`stage-label ${step.stage}`}>
+            <div className={`stage-label ${step.stage === 'listen' ? 'listen' : ''}`}>
+              {step.stage === 'listen' && <span className="rec-dot" />}
               {step.stage === 'tone' ? '🔊 기준음을 들어보세요' : '🎤 따라 불러보세요!'}
             </div>
             {step.stage === 'listen' && (

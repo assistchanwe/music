@@ -24,24 +24,35 @@ export function RangeResult({
 
   return (
     <div className="card wide">
-      <h2>측정 결과</h2>
-
       <div className="result-summary">
+        <span className="result-kicker">측정 결과</span>
         <div className="result-range">
-          <strong>{midiToNoteName(lowMidi)}</strong>
+          {midiToNoteName(lowMidi)}
           <span className="range-arrow">~</span>
-          <strong>{midiToNoteName(highMidi)}</strong>
-        </div>
-        <div className="muted">
-          {midiToKoreanNotation(lowMidi)} ~ {midiToKoreanNotation(highMidi)} ·{' '}
-          {rangeWidthLabel(lowMidi, highMidi)}
-        </div>
-        <div className="voice-type">
-          예상 성종: <strong>{voice.name}</strong>
+          {midiToNoteName(highMidi)}
         </div>
       </div>
 
-      <Piano lowMidi={lowMidi} highMidi={highMidi} />
+      <div className="stat-grid">
+        <div className="stat">
+          <span className="stat-label">한국식 표기</span>
+          <span className="stat-value">
+            {midiToKoreanNotation(lowMidi)} ~ {midiToKoreanNotation(highMidi)}
+          </span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">음역 폭</span>
+          <span className="stat-value">{rangeWidthLabel(lowMidi, highMidi)}</span>
+        </div>
+        <div className="stat">
+          <span className="stat-label">예상 성종</span>
+          <span className="stat-value">{voice.name}</span>
+        </div>
+      </div>
+
+      <div className="piano-wrap">
+        <Piano lowMidi={lowMidi} highMidi={highMidi} />
+      </div>
 
       <h2 className="rec-heading">🎵 이 음역대에 맞는 노래</h2>
       <SongList userLow={lowMidi} userHigh={highMidi} />
