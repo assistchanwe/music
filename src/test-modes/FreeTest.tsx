@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { openMic, type MicSession } from '../audio/mic';
 import { detectVoicedPitch } from '../audio/pitchDetector';
 import { centsOff, freqToMidiFloat, midiToNoteName } from '../audio/notes';
+import { PitchGraph, type PitchSample } from '../components/PitchGraph';
 
 const HOLD_MS = 300; // 이만큼 유지된 음만 기록
 
@@ -28,6 +29,7 @@ export function FreeTest({
   });
   const micRef = useRef<MicSession | null>(null);
   const rangeRef = useRef<{ low: number | null; high: number | null }>({ low: null, high: null });
+  const historyRef = useRef<PitchSample[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -43,15 +45,17 @@ export function FreeTest({
         micRef.current = mic;
 
         const loop = () => {
+          const now = performance.now();
           const r = detectVoicedPitch(mic.readFrame(), mic.sampleRate);
           let note: string | null = null;
           let cents = 0;
           if (r) {
-            const midi = Math.round(freqToMidiFloat(r.freq));
+            const midiFloat = freqToMidiFloat(r.freq);
+            const midi = Math.round(midiFloat);
             note = midiToNoteName(midi);
             cents = centsOff(r.freq);
+            historyRef.current.push({ time: now, midi: midiFloat });
 
-            const now = performance.now();
             if (candidate && candidate.midi === midi) {
               if (now - candidate.since >= HOLD_MS) {
                 const range = rangeRef.current;
@@ -62,6 +66,7 @@ export function FreeTest({
               candidate = { midi, since: now };
             }
           } else {
+            historyRef.current.push({ time: now, midi: null });
             candidate = null;
           }
           setLive({ note, cents, lowMidi: rangeRef.current.low, highMidi: rangeRef.current.high });
@@ -108,14 +113,24 @@ export function FreeTest({
         &ldquo;아~&rdquo; 하고 잠시(0.3초 이상) 유지한 음만 기록됩니다.
       </p>
 
-      <div className="pitch-display">
-        <div className={`pitch-note ${live.note ? '' : 'idle'}`}>{live.note ?? '—'}</div>
-        <div className="cents-meter">
-          <div className="cents-bar" style={{ left: `${50 + live.cents / 1.2}%` }} />
+      <div className="graph-panel">
+        <PitchGraph
+          historyRef={historyRef}
+          recordedLow={live.lowMidi}
+          recordedHigh={live.highMidi}
+        />
+        <div className="graph-overlay">
+          <span className={`overlay-note ${live.note ? '' : 'idle'}`}>{live.note ?? '—'}</span>
+          {live.note && (
+            <span className="overlay-cents">
+              {live.cents > 0 ? '+' : ''}
+              {live.cents}¢
+            </span>
+          )}
         </div>
-        <div className={`stage-label ${live.note ? 'listen' : ''}`}>
+        <div className={`stage-label graph-status ${live.note ? 'listen' : ''}`}>
           <span className="rec-dot" />
-          {live.note ? `${live.cents > 0 ? '+' : ''}${live.cents}센트` : '소리를 내보세요'}
+          {live.note ? '측정 중' : '소리를 내보세요'}
         </div>
       </div>
 

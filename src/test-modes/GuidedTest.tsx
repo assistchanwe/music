@@ -2,12 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { openMic, type MicSession } from '../audio/mic';
 import { detectVoicedPitch } from '../audio/pitchDetector';
 import { freqToMidiFloat, midiToFreq, midiToNoteName } from '../audio/notes';
+import { PitchGraph, type PitchSample } from '../components/PitchGraph';
 
 const FLOOR = 36; // C2
 const CEIL = 84; // C6
 const TONE_SEC = 1.2;
 const LISTEN_MS = 2500;
 const MAX_FAILS = 2; // 연속 실패 허용 횟수
+// 통과에 필요한 매칭 프레임 수 (약 60fps 기준, 전체의 20%)
+const NEEDED_FRAMES = Math.max(8, Math.round((LISTEN_MS / 16.7) * 0.2));
 
 type Phase = 'select' | 'testing' | 'error';
 type Direction = 'down' | 'up';
@@ -18,6 +21,8 @@ interface StepInfo {
   stage: 'tone' | 'listen';
   liveNote: string | null;
   matched: boolean;
+  /** 통과 기준 대비 진행률 0~1 (허밍업식 정확도 게이지) */
+  accuracy: number;
   passedLow: number | null;
   passedHigh: number | null;
 }
@@ -26,7 +31,8 @@ interface StepInfo {
 async function measureStep(
   mic: MicSession,
   targetMidi: number,
-  onFrame: (liveNote: string | null, matched: boolean) => void,
+  historyRef: React.MutableRefObject<PitchSample[]>,
+  onFrame: (liveNote: string | null, matched: boolean, accuracy: number) => void,
   isCancelled: () => boolean,
 ): Promise<boolean> {
   const start = performance.now();
@@ -36,6 +42,7 @@ async function measureStep(
   return new Promise((resolve) => {
     const loop = () => {
       if (isCancelled()) return resolve(false);
+      const now = performance.now();
       const r = detectVoicedPitch(mic.readFrame(), mic.sampleRate);
       let liveNote: string | null = null;
       let matched = false;
@@ -44,13 +51,15 @@ async function measureStep(
         liveNote = midiToNoteName(Math.round(midiFloat));
         matched = Math.abs(midiFloat - targetMidi) <= 0.5;
         if (matched) matchedFrames++;
+        historyRef.current.push({ time: now, midi: midiFloat, matched });
+      } else {
+        historyRef.current.push({ time: now, midi: null });
       }
       totalFrames++;
-      onFrame(liveNote, matched);
-      if (performance.now() - start < LISTEN_MS) {
+      onFrame(liveNote, matched, Math.min(1, matchedFrames / NEEDED_FRAMES));
+      if (now - start < LISTEN_MS) {
         requestAnimationFrame(loop);
       } else {
-        // 전체 수집 시간의 약 20% 이상 목표음에 머물면 통과
         resolve(matchedFrames >= Math.max(8, totalFrames * 0.2));
       }
     };
@@ -70,6 +79,7 @@ export function GuidedTest({
   const [step, setStep] = useState<StepInfo | null>(null);
   const cancelledRef = useRef(false);
   const micRef = useRef<MicSession | null>(null);
+  const historyRef = useRef<PitchSample[]>([]);
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -101,42 +111,33 @@ export function GuidedTest({
     let passedLow: number | null = null;
     let passedHigh: number | null = null;
 
-    const update = (partial: Partial<StepInfo>, target: number, direction: Direction) =>
-      setStep((prev) => ({
-        targetMidi: target,
-        direction,
-        stage: 'listen',
-        liveNote: null,
-        matched: false,
-        passedLow,
-        passedHigh,
-        ...prev,
-        ...partial,
-      }));
-
     // 한 방향으로 반음씩 진행하며 한계음을 찾는다
     const sweep = async (direction: Direction): Promise<number | null> => {
       let target = direction === 'down' ? startMidi : startMidi + 1;
       let lastPassed: number | null = null;
       let fails = 0;
       while (!cancelledRef.current && target >= FLOOR && target <= CEIL) {
-        setStep({
+        const base: StepInfo = {
           targetMidi: target,
           direction,
           stage: 'tone',
           liveNote: null,
           matched: false,
+          accuracy: 0,
           passedLow,
           passedHigh,
-        });
+        };
+        setStep(base);
         await mic.playTone(midiToFreq(target), TONE_SEC);
         if (cancelledRef.current) return lastPassed;
 
-        update({ stage: 'listen' }, target, direction);
+        setStep({ ...base, stage: 'listen' });
         const passed = await measureStep(
           mic,
           target,
-          (liveNote, matched) => update({ stage: 'listen', liveNote, matched }, target, direction),
+          historyRef,
+          (liveNote, matched, accuracy) =>
+            setStep({ ...base, stage: 'listen', liveNote, matched, accuracy }),
           () => cancelledRef.current,
         );
         if (cancelledRef.current) return lastPassed;
@@ -179,8 +180,9 @@ export function GuidedTest({
       <div className="card">
         <h2>가이드 측정</h2>
         <p className="muted">
-          기준음을 들려드리면 &ldquo;아~&rdquo; 하고 따라 불러주세요. 낮은 음부터 차례로 내려간 뒤,
-          다시 높은 음으로 올라가며 한계를 찾습니다. 시작 음높이를 선택하세요.
+          기준음을 들려드리면 &ldquo;아~&rdquo; 하고 따라 불러주세요. 그래프의{' '}
+          <strong>목표 밴드 안에 공을 넣으면</strong> 통과! 낮은 음부터 차례로 내려간 뒤, 다시
+          높은 음으로 올라가며 한계를 찾습니다.
         </p>
         <div className="btn-row">
           <button className="primary" onClick={() => void runTest(48)}>
@@ -211,18 +213,28 @@ export function GuidedTest({
       <h2>{step?.direction === 'down' ? '최저음 찾는 중 ⬇️' : '최고음 찾는 중 ⬆️'}</h2>
       {step && (
         <>
-          <div className="pitch-display">
-            <div className="pitch-note target">{midiToNoteName(step.targetMidi)}</div>
-            <div className={`stage-label ${step.stage === 'listen' ? 'listen' : ''}`}>
-              {step.stage === 'listen' && <span className="rec-dot" />}
-              {step.stage === 'tone' ? '🔊 기준음을 들어보세요' : '🎤 따라 불러보세요!'}
+          <div className="graph-panel">
+            <PitchGraph historyRef={historyRef} targetMidi={step.targetMidi} />
+            <div className="graph-overlay">
+              <span className={`overlay-note ${step.liveNote ? '' : 'idle'}`}>
+                {step.liveNote ?? '—'}
+              </span>
             </div>
-            {step.stage === 'listen' && (
-              <div className={`live-note ${step.matched ? 'matched' : ''}`}>
-                {step.liveNote ?? '…'}
-              </div>
-            )}
+            <div className={`stage-label graph-status ${step.stage === 'listen' ? 'listen' : ''}`}>
+              {step.stage === 'listen' && <span className="rec-dot" />}
+              {step.stage === 'tone'
+                ? `🔊 ${midiToNoteName(step.targetMidi)} 기준음을 들어보세요`
+                : '🎤 따라 불러보세요!'}
+            </div>
           </div>
+
+          <div className="accuracy-gauge" aria-label="정확도 게이지">
+            <div
+              className={`accuracy-fill ${step.accuracy >= 1 ? 'full' : ''}`}
+              style={{ width: `${Math.round(step.accuracy * 100)}%` }}
+            />
+          </div>
+
           <div className="range-live">
             <div>
               <span className="muted small">확정 최저음</span>

@@ -324,6 +324,73 @@ button:disabled {
 }
 
 /* ── 측정 화면 ─────────────────────────── */
+.graph-panel {
+  position: relative;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.pitch-graph {
+  display: block;
+  width: 100%;
+}
+.graph-overlay {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  pointer-events: none;
+}
+.overlay-note {
+  font-size: 1.9rem;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: #ffd24a;
+  text-shadow: 0 0 16px rgba(255, 210, 74, 0.45);
+  font-variant-numeric: tabular-nums;
+}
+.overlay-note.idle {
+  color: rgba(255, 255, 255, 0.22);
+  text-shadow: none;
+}
+.overlay-cents {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.graph-status {
+  position: absolute;
+  left: 50%;
+  bottom: 0.8rem;
+  transform: translateX(-50%);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+
+.accuracy-gauge {
+  height: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.accuracy-fill {
+  height: 100%;
+  border-radius: 5px;
+  background: linear-gradient(90deg, #ffd24a, #f59e0b);
+  box-shadow: 0 0 12px rgba(255, 210, 74, 0.5);
+  transition: width 0.1s linear;
+  width: 0;
+}
+.accuracy-fill.full {
+  background: linear-gradient(90deg, #5eead4, #34d399);
+  box-shadow: 0 0 14px rgba(94, 234, 212, 0.6);
+}
+
 .pitch-display {
   text-align: center;
   display: flex;
